@@ -120,17 +120,190 @@ $ sudo apt-get install docker-ce docker-ce-cli containerd.io
 $ sudo docker run hello-world
 ```
 
-Now lets prepare them one-by-one in correct order as shown in the following diagram.
+Having all of our hosts ready with docker, now lets prepare them one-by-one in correct order as shown in the following diagram.
 
 ![Deployment Topology](DockerSwarm-DeploymentSchema-Setup.png)
 
 ### I. Configure the Master Swarm Manager
 
+The complete manual on how to create a swarm can read [here](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/)
+
+1. SSH to your Master Swarm Manager
+
+```sh
+$ ssh 10.1.1.1
+```
+
+2. Advertise the new Swarm and declare this server as the `Master`
+
+```sh
+$ sudo docker swarm init --advertise-addr 10.1.1.1
+```
+The output would looks similar like the following
+
+```sh
+$ sudo docker swarm init --advertise-addr 10.1.1.1
+Swarm initialized: current node (dxn1zf6l61qsb1josjja83ngz) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+    docker swarm join \
+    --token SWMTKN-1-49nj1cmql0jkz5s954yi3oex3nedyz0fb0xx14ie39trti4wxv-8vxv8rssmk743ojnwacrr2e7c \
+    10.1.1.1:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+```
+
+*Important* You should take note the instruction to be executed of each of every worker later on.
+
+```sh
+$ sudo docker swarm join --token \
+    SWMTKN-1-49nj1cmql0jkz5s954yi3oex3nedyz0fb0xx14ie39trti4wxv-8vxv8rssmk743ojnwacrr2e7c \
+    10.1.1.1:2377
+```
+
+*Important* You should also take note the command to add another manager (slave managers) into the swarm
+
+```sh
+$ sudo docker swarm join-token manager
+```
+
+3. You can always check the swarm status by invoking `docker info` command and see all swarm nodes by invoking `docker node ls` command.
+
 ### II. Configure the Slave Swarm Managers
+
+1. SSH to your 1st Slave Swarm Manager
+
+```sh
+$ ssh 10.1.1.2
+```
+
+2. Add new Manager to the previously created swarm
+
+```sh
+$ sudo docker swarm join-token manager
+```
+
+Follow the instruction on screen.
+
+3. Repeat again #1 and #2 for the 2nd Slave Swarm Manager
 
 ### III. Configure the Swarm Workers
 
+The complete manual on how to add node to a swarm can be read [here](https://docs.docker.com/engine/swarm/swarm-tutorial/add-nodes/)
+
+For every each one of the host for Swarm Worker, `10.1.1.10` to `10.1.1.29` repeat all the following steps.
+
+1. SSH to your 1st Swarm Worker
+
+```sh
+$ ssh 10.1.1.10
+```
+
+2. Execute the command advised from the previous `docker swarm init` when you crete the swarm in the previous "Configure the Master Swarm Manager" step.
+
+```sh
+$ sudo docker swarm join --token \
+    SWMTKN-1-49nj1cmql0jkz5s954yi3oex3nedyz0fb0xx14ie39trti4wxv-8vxv8rssmk743ojnwacrr2e7c \
+    10.1.1.1:2377
+```
+
+The output should be simillar to the following
+
+```sh
+$ sudo docker swarm join --token \
+    SWMTKN-1-49nj1cmql0jkz5s954yi3oex3nedyz0fb0xx14ie39trti4wxv-8vxv8rssmk743ojnwacrr2e7c \
+    10.1.1.1:2377
+
+This node joined a swarm as a worker.
+```
+
+3. Repeat #1 and #2 above for every host for Swarm Worker (`10.1.1.10` to `10.1.1.29`).
+
 ### IV. Configure the Docker Registry
+
+The complete manual on how to prepare a docker registry can be read [here](https://docs.docker.com/registry/deploying/)
+
+**Prerequisite**
+
+1. We going to assume that this registry will be accessible from the internet at `https://registry.domain.com`
+2. The host, 10.1.1.30:443 have their routing and firewall reachable from the internet through the domain above.
+3. You have your own **VALID** SSL certificate (namely `domain.crt` and `domain.key` files). All these files are located on the host in `/cert` folder. Please also ensure that the `domain.crt` are a fully `chained` certificate (if your CA do not provide you with one).
+
+You can chain your certificate using the following command
+
+```sh
+cat /certs/domain.crt /certs/intermediate-certificates.pem > /certs/domain-chained.crt
+```
+
+4. You have to have an access list in form of a `htpasswd` file located in `/auth` folder. This will provide a basic and native way for user-password authentication to your registry.
+
+First. Stop the registry if its already started.
+
+```sh
+$ sudo docker container stop registry
+```
+
+Second. Create the `/auth` folder
+
+```sh
+$sudo mkdir /auth
+```
+
+Third. Create the user.
+
+```sh
+$ sudo docker run \
+  --entrypoint htpasswd \
+  registry:2 -Bbn testuser testpassword > /auth/htpasswd
+```
+
+Fourth. Stop the registry again.
+
+```sh
+$ sudo docker container stop registry
+```
+
+From here you should have a directory `/auth` containing `htpasswd` file.
+
+```sh
+$ cat /auth/htpasswd
+testuser:$2y$05$8IpPEG94/u.gX4Hn9zDU3.6vru2rHJSehPEZfD1yyxHu.ABc2QhSa
+```
+
+**Deploying**
+
+1. SSH to your Docker Registry Host
+
+```sh
+$ ssh 10.1.1.30
+```
+
+2. Prepare a folder where you will store all of the images (possibly mounted from an NFS)
+
+```sh
+$ sudo mkdir -p /mnt/registry
+$ sudo mount 10.1.2.3:/var/nfs/registry /mnt/registry
+```
+
+2. Deploy the registry image
+
+```sh
+$ docker run -d \
+        -p 443:443 \
+        --restart=always \
+        --name registry \
+        --v /certs:/certs \
+        --v /auth:/auth \
+        --v /mnt/registry:/var/lib/registry \
+        -e "REGISTRY_AUTH=htpasswd" \
+        -e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
+        -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+        -e REGISTRY_HTTP_ADDR=0.0.0.0:443 \
+        -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
+        -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
+        registry:2
+```
 
 ### V. COnfigure the Firewall
 
