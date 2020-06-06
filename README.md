@@ -170,6 +170,62 @@ $ sudo docker swarm join-token manager
 
 3. You can always check the swarm status by invoking `docker info` command and see all swarm nodes by invoking `docker node ls` command.
 
+#### Configure SSH Keys for use by Azure DevOps so it can SSH to this master manager.
+
+1. Create a new user for Azure DevOps
+
+```sh
+$ useradd azure
+```
+
+2. Switch user as `azure`
+
+```sh
+$ sudo su azure
+```
+
+3. Create keypair
+
+```sh
+$ ssh-keygen -t rsa
+```
+
+The output would look something like this
+
+```
+$ ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/azure/.ssh/id_rsa): 
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /home/azure/.ssh/id_rsa.
+Your public key has been saved in /home/azure/.ssh/id_rsa.pub.
+The key fingerprint is:
+4a:dd:0a:c6:35:4e:3f:ed:27:38:8c:74:44:4d:93:67 azure@a
+The key's randomart image is:
++--[ RSA 2048]----+
+|          .oo.   |
+|         .  o.E  |
+|        + .  o   |
+|     . = = .     |
+|      = S = .    |
+|     o + = +     |
+|      . o + o .  |
+|           . o   |
+|                 |
++-----------------+
+```
+
+4. Append the public key `/home/azure/.ssh/id_rsa.pub` into the end of `/home/azure/.ssh/authorized_keys`
+
+5. Makesure that `/home/azure/.ssh/authorized_keys` file mode is 600.
+
+```
+$ chmod 600 /home/azure/.ssh/authorized_keys
+```
+
+**Important** Copy the private key `/home/azure/.ssh/id_rsa` to your local and store it safely. You will use this key later to configure azure devops so it can SSH to the server.
+
 ### II. Configure the Slave Swarm Managers
 
 1. SSH to your 1st Slave Swarm Manager
@@ -331,6 +387,57 @@ iptables -t nat -A PREROUTING -p tcp -d 10.1.1.1 --dport 22 -j DNAT --to-destina
 
 ### VI. Configure the Azure DevOps
 
+We need to configure azure to store *secrets* for it to later use when authenticating to docker registry and ssh into the swarm manager master.
 
+#### Service Connection To Docker Registry
+
+1. Login to Azure DevOps and open your project.
+2. Open `Project settings`
+
+![Project Screen](Azure-Project.png)
+
+3. Select `Service Connection` from the `Project Settings` menu.
+
+![Project Screen Menu](Azure-Service-Connection.png)
+
+4. Choose `Docker Registry` option and click `Next`
+
+![Choose Service Connection](Azure-Choose-Connection.png)
+
+5. Fill in the `New Docker Registry service connection form`. Specifying all information we have during preparation of the Docker Registry above. When done, click `Save`
+
+![Create Docker Registry Service Connection](Azure-Create-Docker-Registry.png)
+
+Description about each field in the form can be read [Here](https://docs.microsoft.com/en-us/azure/devops/pipelines/library/service-endpoints?view=azure-devops&tabs=yaml#sep-docreg)
+
+**Important !!** Take note of the `Service Connection Name` you just created. You will need to use this name later when configuring the pipeline.
+
+#### Service Connection for SSH to Master Swarm Manager
+
+1. Login to Azure DevOps and open your project.
+2. Open `Project settings`
+
+![Project Screen](Azure-Project.png)
+
+3. Select `Service Connection` from the `Project Settings` menu.
+
+![Project Screen Menu](Azure-Service-Connection.png)
+
+4. Choose `SSH` option and click `Next`
+
+![Choose Service Connection](Azure-Choose-Connection-Ssh.png)
+
+5. Fill in the `New SSH service connection form`. Specifying all information we have during preparation of the SSH of Master Swarm Manager above. When done, click `Save`
+
+![Create Docker Registry Service Connection](Azure-Create-Docker-Registry.png)
+
+- Host Name : Is the hostname to reach Master Swarm Manager (should've configured in DNS and Firewall)
+- Port Number : 22
+- Private Key : Copy the content of Private Key that you saved during the `Configure SSH Keys for use by Azure DevOps so it can SSH to this master manager` stage above. Or simply upload it.
+- Username : azure
+
+Description about each field in the form can be read [Here](https://docs.microsoft.com/en-us/azure/devops/pipelines/library/service-endpoints?view=azure-devops&tabs=yaml#sep-ssh)
+
+**Important !!** Take note of the `Service Connection Name` you just created. You will need to use this name later when configuring the pipeline.
 
 ### VII. Configure the Deployment Pipeline
