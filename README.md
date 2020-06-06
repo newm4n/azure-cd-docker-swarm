@@ -305,8 +305,32 @@ $ docker run -d \
         registry:2
 ```
 
-### V. COnfigure the Firewall
+### V. Configure the Firewall
+
+#### 1. Enabling Azure DevOps to push new image to our Docker Registry using SSL on port 443.
+
+The docker registry are configured to accept `https` connection on port 443. Thus we simply
+add port forwarding in the firewall to forward incoming to port 443 to the Registry (10.1.1.30).
+
+Add routing on the fire wall similar to the following iptables instruction.
+
+```
+iptables -t nat -A PREROUTING -p tcp -d 10.1.1.30 --dport 443 -j DNAT --to-destination 10.1.1.30:443
+```
+
+#### 2. Enabling Azure DevOps to ssh the Master Swarm Manager for updating services.
+
+Azure DevOps will try to SSH to Master Swarm Manager for invoking `docker service update` command.
+Thus we simply add port forwarding in the firewall to forward incoming to 22 to the Manager (10.1.1.1).
+
+Add routing on the fire wall similar to the following iptables instruction.
+
+```
+iptables -t nat -A PREROUTING -p tcp -d 10.1.1.1 --dport 22 -j DNAT --to-destination 10.1.1.1:22
+```
 
 ### VI. Configure the Azure DevOps
+
+
 
 ### VII. Configure the Deployment Pipeline
