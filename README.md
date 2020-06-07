@@ -441,3 +441,52 @@ Description about each field in the form can be read [Here](https://docs.microso
 **Important !!** Take note of the `Service Connection Name` you just created. You will need to use this name later when configuring the pipeline.
 
 ### VII. Configure the Deployment Pipeline
+
+For every project that you want to deploy, we have to create the `azure-pipelines.yml`.
+
+```yaml
+trigger:
+  tags:
+    include:
+    - *.GA
+
+  pool:
+    vmImage: 'Ubuntu-16.04'
+
+  steps:
+  - task: ...
+    ...
+  - task: ...
+    ...
+  - task: ...
+    ...
+# First we login to the Docker Registry
+  - task: Docker
+    displayName: Login Docker Registry
+    inputs:
+        command: login
+        containerRegistry: RegistryServiceConnection
+# Then we built the Docker Image, Tag them and Push into the Registry
+  - task: Docker
+    displayName: Build and Push
+    inputs:
+        command: buildAndPush
+        repository: service/SomeService
+        tags: |
+            latest
+# Logout from the registry
+  - task: Docker
+    displayName: Logout Docker Registry
+    inputs:
+        command: logout
+        containerRegistry: RegistryServiceConnection
+# Run shell commands or a script on a remote machine using SSH
+# This will instruct a service to update it self using the new :latest image.
+  - task: SSH@0
+    inputs:
+       sshEndpoint:  MasterSwarmManagerServiceConnection
+       runOptions: commands
+       commands: sudo docker service update --image service/SomeService:latest --force service_name
+       failOnStdErr: true
+
+```
